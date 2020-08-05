@@ -1,0 +1,615 @@
+---
+title: "Cybersecurity Workforce Personality Analysis"
+author: "Matthew DeLoia, Data Scientist, Defense Systems"
+date: "Columbus, Georgia"
+output: 
+  ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+#load libraries
+library(Rmisc)
+library(foreign)
+library (memisc)
+library(tidyverse)
+library(readxl)
+library(eRm)
+library(ggcorrplot)
+library(corrplot)
+library(chron)
+library(hms)
+library(mclust)
+library(imputeMissings)
+library(randomForest)
+library(plotly)
+library(ggdendro)
+library(cluster)
+library(wordcloud)
+library(wordcloud2)
+library(stringr)
+library(tm)
+library(gganimate)
+library(pracma)
+
+likertNum <- function(x){
+        case_when(
+                x == "Very Accurate" ~ 5,
+                x == "Moderately Accurate" ~ 4,
+                x == "Neither Accurate Nor Inaccurate" ~ 3,
+                x == "Moderately Inaccurate" ~ 2,
+                x == "Very Inaccurate" ~ 1
+        )
+}
+
+likertNum2 <- function(x){
+        case_when(
+                x == "VERY ACCURATE" ~ 5,
+                x == "MODERATELY ACCURATE" ~ 4,
+                x == "NEITHER INACC NOR ACCUR" ~ 3,
+                x == "MODERATELY INACCURATE" ~ 2,
+                x == "VERY INACCURATE" ~ 1
+        )
+}
+
+#load Cyber Summit Questionnnaire data
+df <- read_excel("CyberSummitQuestionnaire_Data21July20.xls")
+df <- df %>% rownames_to_column("ID") 
+n_CyberPro <- df %>% filter(CyberPro=="Yes") %>% count()
+df$Duration <- as.hms(df$Duration)
+
+cogntive <- 88:94
+df[cogntive] <- lapply(df[cogntive], as.factor) 
+#Impute the mode
+df[4:10] <- impute( df[4:10], object = NULL, method = "median/mode", flag = FALSE)
+df[88:94] <- impute( df[88:94], object = NULL, method = "median/mode", flag = FALSE)
+
+#Load and Process Eugene-Springfield dataset
+df_ESDemo <- as.data.set(spss.portable.file("demographics.por"), to.data.frame=T)
+df_ESDemo <-as.data.frame(df_ESDemo)
+df_ES <- as.data.set(spss.portable.file("IPIP2539-1.por"), to.data.frame=T)
+df_ES <- as.data.frame(df_ES)
+df_ES2 <- df_ES %>% dplyr::select (ID, A1:A99, C1:C9, M1:M9) %>% gather(A1:A99, C1:C9, M1:M9, key=Question, value = Response, na.rm = TRUE)
+df_ES2$Response <- toupper(df_ES2$Response)
+df_ES3 <- df_ES2 %>% 
+        mutate_at(vars(`Response`), likertNum2) %>% 
+        spread(key=Question, value=Response) 
+df_ES4 <- df_ES %>%  dplyr::select(-(A1:A99),-(C1:C9), -(M1:M9)) %>% left_join(df_ES3, by="ID")
+df_ES5 <- df_ESDemo %>% left_join(df_ES4, by="ID")
+df_ES5$ID <- as.character(df_ES5$ID)
+df_ESscored <- df_ES5 %>% group_by(ID) %>% 
+        mutate(Anxiety = (sum(H926,H980, S3, H761, X107 ) ),      
+               Social_Astuteness = (sum(H1137, P432, P451, V96, V153)),
+               Breadth_of_Interest = (sum(X211, V140, V2, V330, H1265) ), 
+               Complexity = (sum(H1276, Q228, H1267, H1284, V256) ), 
+               Social_Confidence = (sum(H1110,S29,P364, H1366, H16 ) ), 
+               Cooperativeness = (sum(P420,E147,D107,E68, H974)),  
+               Empathy = (sum(D19, X253,H173,	D6,Q256) ), 
+               Energy_Level = (sum(H54,	H555,H554,Q151,H79) ), 
+               Innovation = (sum(H53,	V259,V226, H447,  X225) ),  
+               Organization  = (sum(V98,Q163,V261, H258, V12) ), 
+               Responsibility = (sum(H152,V303, D10, E80,V170) ), 
+               Risk_Taking = (sum(S19,S4, R77, R58, Q126) ), 
+               Sociability = (sum(D70,X161, H78, H985, Q238) ), 
+               Tolerance = (sum(H148, Q59, X59, D113, X90) ),
+               Traditional_Values = (sum(D88, V46, Q44, H296, X76) ) ) %>%
+  dplyr::select (ID, SEX, AGE, EMPLOY, Anxiety:Traditional_Values) %>%
+  dplyr::rename(Age = AGE, Gender = SEX) %>% na.omit() %>%
+  mutate(Group = "WorkPopulation")
+df_ESscored$Gender <- gsub("M", "Male", df_ESscored$Gender )
+df_ESscored$Gender <- gsub("F", "Female", df_ESscored$Gender )
+
+#filter to desired comparative population
+df_ESscored2 <- df_ESscored %>% filter(EMPLOY %in% c("full time", "part time", "retired"), Age>=22 & Age<=75, Gender=="Male") %>%  dplyr::select(Group, ID, Gender, Age, Anxiety:Traditional_Values )  %>% na.omit()
+summaryES <- df_ESscored2 %>% gather(Anxiety:Traditional_Values, key=Dimension, value=Score) %>% summarySE(groupvars = "Dimension", measurevar = "Score" )
+
+anxiety <- summaryES %>% filter(Dimension=="Anxiety")
+breadth_of_interest <- summaryES %>% filter(Dimension=="Breadth_of_Interest")
+complexity <- summaryES %>% filter(Dimension=="Complexity")
+cooperativeness <- summaryES %>% filter(Dimension=="Cooperativeness")
+empathy <- summaryES %>% filter(Dimension=="Empathy")
+energy_level <- summaryES %>% filter(Dimension=="Energy_Level")
+innovation <- summaryES %>% filter(Dimension=="Innovation")
+organization <- summaryES %>% filter(Dimension=="Organization")
+responsibility <- summaryES %>% filter(Dimension=="Responsibility")
+risk_taking <- summaryES %>% filter(Dimension=="Risk_Taking")
+sociability <- summaryES %>% filter(Dimension=="Sociability")
+social_astuteness <- summaryES %>% filter(Dimension=="Social_Astuteness")
+social_confidence <- summaryES %>% filter(Dimension=="Social_Confidence")
+tolerance <- summaryES %>% filter(Dimension=="Tolerance")
+traditional_values <- summaryES %>% filter(Dimension=="Traditional_Values")
+responsibility <- summaryES %>% filter(Dimension=="Responsibility")
+
+#Processing Demograpic data (Education)
+df$FieldofEducation <- gsub("Yes", 1, df$FieldofEducation)
+df$FieldofEducation2 <- gsub("Yes", 1, df$FieldofEducation2)
+df$FieldofEducation3 <- gsub("Yes", 1, df$FieldofEducation3)
+df$FieldofEducation <- gsub("No", 0, df$FieldofEducation)
+df$FieldofEducation2 <- gsub("No", 0, df$FieldofEducation2)
+df$FieldofEducation3 <- gsub("No", 0, df$FieldofEducation3)
+df_ed <- df %>% filter(CyberPro =="Yes") %>% select(ID, Education, FieldofEducation, FieldofEducation2, FieldofEducation3) %>% na.omit()
+df_ed$FieldofEducation <- as.numeric(df_ed$FieldofEducation)
+df_ed$FieldofEducation2 <- as.numeric(df_ed$FieldofEducation2)
+df_ed$FieldofEducation3 <- as.numeric(df_ed$FieldofEducation3)
+df_ed2 <- df_ed %>%  group_by(ID) %>%
+  mutate(Degrees=if_else(Education=="Bachelors", 1, if_else(Education=="Masters", 2, if_else(Education=="PhD", 3, 0)))) %>% 
+  mutate(CS_Degree= sum(FieldofEducation, FieldofEducation2, FieldofEducation3))
+cs_degree <- sum(df_ed2$CS_Degree)
+degree <- sum(df_ed2$Degrees)
+cs_percent <- round(cs_degree/degree, 2)*100
+
+#Processing Demograpic data (Experience)
+df_Years <- df %>% filter(CyberPro=="Yes") %>%  
+  select(ID, Age, YearsExperience)  %>%  
+  gather(Age:YearsExperience, key=Category, value=Years) 
+medianAge <- df_Years %>% filter(Category=="Age") 
+medianAge <- median(medianAge$Years)
+medianExperience <- df_Years %>% filter(Category=="YearsExperience")
+medianExperience <- median(medianExperience$Years)
+
+#Processing Demograpic data (Certifications)
+df_cert <-df %>% filter(CyberPro=="Yes") %>%  select(Certifications) 
+df_cert$Certifications<- gsub("\\(", "", df_cert$Certifications)
+df_cert$Certifications<- gsub("\\)", "", df_cert$Certifications)
+df_cert2<-df_cert %>% separate(Certifications, c("Certifications1", "Certifications2", "Certifications3", "Certifications4", "Certifications5", "Certifications6", "Certifications7", "Certifications8", "Certifications9"), sep=",") %>%
+  gather(Certifications1:Certifications9, key=Category, value=Certifications) %>%
+  select (-Category ) %>%  
+  na.omit(df_cert)
+df_cert3 <- df_cert2 %>% group_by(Certifications) %>% summarise(n=n()/n_CyberPro$n)
+
+#Processing Demograpic data (Hobbies)
+df_hobby <-df %>% filter(CyberPro=="Yes") %>%  select(Hobbies) 
+df_hobby$Hobbies<- gsub("\\(", "", df_hobby$Hobbies)
+df_hobby$Hobbies<- gsub("\\)", "", df_hobby$Hobbies)
+df_hobby2<-df_hobby %>% separate(Hobbies, c("Hobbies1", "Hobbies2", "Hobbies3", "Hobbies4", "Hobbies5", "Hobbies6", "Hobbies7", "Hobbies8"), sep=",") %>%
+  gather(Hobbies1:Hobbies8, key=Category, value=Hobbies) %>% select (-Category ) %>%
+  na.omit(df_hobby) 
+
+#Scoring respondant data        
+df_scores <- df %>%   
+        mutate_at(vars(P_AN5:P_RE4), likertNum) %>% 
+        mutate(Pattern_Q58 = if_else(Pattern_Q58==4, 1, 0),
+        Pattern_Q1 = if_else(Pattern_Q1==4, 1, 0),
+        `3D_Q24` = if_else(`3D_Q24`==3, 1, 0),
+        Verbal_Q4 = if_else(Verbal_Q4==4, 1, 0),
+        Verbal_Q16 = if_else(Verbal_Q16==4, 1, 0),
+        Matrix_Q55 = if_else(Matrix_Q55==4, 1, 0) )
+
+#Rasch scoring cognitive questions
+df_cognitive <- df_scores %>% select(ID, Pattern_Q58:Matrix_Q55) %>% column_to_rownames("ID") 
+rm.res <- RM(df_cognitive)
+pp <- person.parameter(rm.res)
+df_cognitive2 <-  pp$theta.table %>% 
+        rownames_to_column("ID") %>% 
+        mutate(Proficiency=round(`Person Parameter`, 2)) %>%  select(ID, Proficiency)
+
+#Summary scores for personality and cognitive areas
+df_scored <- df_scores %>% dplyr::group_by(ID) %>% 
+  mutate(Group="NG_Cyber") %>%
+  mutate(Anxiety = (sum(P_AN1, P_AN2, P_AN3, P_AN4, P_AN5 ) ) ,
+                Social_Astuteness = (sum(P_AS1, P_AS2, P_AS3, P_AS4, P_AS5	)),
+                Breadth_of_Interest = (sum(P_BR1, P_BR2, P_BR3, P_BR4, P_BR5	) ) , 
+                Complexity = (sum(P_CM1, P_CM2, P_CM3, P_CM4, P_CM5) ) ,
+                Social_Confidence = (sum(P_CD1, P_CD2, P_CD3, P_CD4, P_CD5) ) ,
+                Cooperativeness = (sum(P_CO1, P_CO2, P_CO3, P_CO4, P_CO5)),
+                Empathy = (sum(P_EM1, P_EM2, P_EM3, P_EM4, P_EM5) ) , 
+                Energy_Level = (sum(P_EN1, P_EN2, P_EN3, P_EN4, P_EN5)) ,
+                Innovation = (sum(P_IN1, P_IN2, P_IN3, P_IN4, P_IN5) ) , 
+                Organization = (sum(P_OR1, P_OR2, P_OR3, P_OR4, P_OR5 ) ) , 
+                Responsibility = (sum(P_RE1, P_RE2, P_RE3, P_RE4, P_RE5) ) ,
+                Risk_Taking = (sum(P_RI1, P_RI2, P_RI3, P_RI4, P_RI5	) ) , 
+                Sociability = (sum(P_SO1, P_SO2, P_SO3, P_SO4, P_SO5 ) ) , 
+                Tolerance = (sum(P_TO1, P_TO2, P_TO3, P_TO4, P_TO5 ) ) ,
+                Traditional_Values= (sum(P_TR1, P_TR2, P_TR3, P_TR4, P_TR5) )) %>%
+  mutate (Cognitive_Score = (sum(Pattern_Q58, Pattern_Q1, `3D_Q24`, Verbal_Q4, Verbal_Q16, Matrix_Q55)) ) %>% 
+  left_join(df_cognitive2) %>%  
+  select(ID:Education,Group:Cognitive_Score, Proficiency, Duration, SelfEfficacy, Email) 
+
+#Scale socres to ES sample (n=151)
+df_scored2 <- df_scored %>%
+  group_by(ID) %>%
+        mutate(Anxiety= (Anxiety-anxiety$Score) / anxiety$sd)   %>% 
+        mutate(Breadth_of_Interest= (Breadth_of_Interest-breadth_of_interest$Score)/breadth_of_interest$sd)  %>% 
+        mutate(Complexity= (Complexity - complexity$Score)/ complexity$sd)  %>% 
+        mutate(Cooperativeness= (Cooperativeness-cooperativeness$Score)/cooperativeness$sd)  %>% 
+        mutate(Empathy= (Empathy-empathy$Score)/empathy$sd) %>% 
+        mutate(Energy_Level= (Energy_Level-energy_level$Score)/energy_level$sd) %>% 
+        mutate(Innovation= (Innovation-innovation$Score)/innovation$sd)  %>%
+        mutate(Organization= (Organization-organization$Score)/organization$sd) %>% 
+        mutate(Responsibility= (Responsibility-responsibility$Score)/responsibility$sd) %>% 
+        mutate(Risk_Taking= (Risk_Taking-risk_taking$Score)/risk_taking$sd)  %>% 
+        mutate(Sociability= (Sociability-sociability$Score)/sociability$sd) %>%
+        mutate(Social_Astuteness= (Social_Astuteness-social_astuteness$Score)/social_astuteness$sd) %>%
+        mutate(Social_Confidence= (Social_Confidence-social_confidence$Score)/social_confidence$sd)  %>%
+        mutate(Tolerance= (Tolerance-tolerance$Score)/tolerance$sd) %>%
+        mutate(Traditional_Values= (Traditional_Values-traditional_values$Score)/traditional_values$sd)
+
+#Latent Profile Analysis
+lpa_test <- df_scores %>% filter(CyberPro=="Yes") %>% select(P_AN5:P_RE4, ID) %>% column_to_rownames ("ID") 
+clustering <- lpa_test %>%  mutate_all(list(scale))
+BIC <- mclustBIC(clustering)
+#plot(BIC)
+summary(BIC)
+mod1 <- Mclust(clustering, modelNames = "VII", G = 2, x = BIC)
+mod1$call
+cluster <- mod1$classification %>% as.factor()
+
+df_scored2 <- as.data.frame(df_scored2)
+df_scored3 <- df_scored2 %>% filter(CyberPro=="Yes") %>%  cbind(cluster)
+
+#visualization of LPA
+df_cluster <- df_scored3 %>% gather(Anxiety:Traditional_Values, key=Dimension, value=Score)
+df_cluster$cluster<-as.factor(df_cluster$cluster)
+df_cluster2 <- df_cluster %>% summarySE (groupvars=c("Dimension", "cluster"), measurevar="Score")%>% 
+  mutate(Comparison = if_else(Score<=-.5, "Low", if_else(Score>=.5, "High", "Average")))
+
+df_cluster2$Comparison <- factor (df_cluster2$Comparison, levels = c("Low", "Average", "High"))
+```
+
+## Introduction
+Problem Statement:  To understand if highly specialized roles, like cybersecurity, attract workers with similar personality profiles.
+
+Hypothesis to test: Cybersecurity workers are similar in personality to others in the general workforce population.
+
+## Session Aims {.pagenumbers}
+
+- Data Collection and Reporting: report a personality profile(s) of cybersecurity professionals attending CyberSummit20
+
+- Analysis & Insights: identify unique personality features (traits) of cybersecurity professionals when compared to the general workforce population
+
+- Conclusions: share ideas and opinions, non-attributional, through the chat module (so I can benefit from your experience and insight)
+
+## Background (1 of 3)|Cybersecurity Talent Assessment Design
+
+- Demographic Information (Age, Gender, Years Experience, Education, Certifications, Hobbies )
+- Personality Assessment (75 Questions, 15 traits)
+- Cognitive Assessment (6 Questions: Pattern Matching, Matrix, Verbal Reasoning, 3D Shapes)
+
+*Comparison Group: approximatley 400 individuals with similar demographic profiles from the Eugene-Springfield Community Sample (1993 - 2003)
+
+## Background (2 of 3) | Personality Assessment
+
+This 75 question personality assessment aims to measure 15 underlying personality traits using similar measurements to the <a href="https://w8y7a2j5.stackpathcdn.com/wp-content/uploads/2015/03/JPI-R-Scales.pdf">Jackson Personality Inventory - Revised (JPI-R)</a>.  
+
+The JPI-R measures were selected due to the range of personality traits measured and inclusion of 7 measurements for "analytical" and "dependable," traits presumed to enhance performance in highly technical work roles.  This set of measures has been useful in vocational counseling.  
+
+This ***JPI-R proxy*** consists of questions drawn from the public domain repository of personality questions  (https://ipip.ori.org/). <br>
+
+## Background (3 of 3)
+<div class="columns-2">
+***Analytical Scales***
+
+- Complexity 
+- Breadth of Interest
+- Innovation
+- Tolerance
+
+***Extroverted Scales***
+
+- Sociability 
+- Social Confidence 
+- Energy Level 
+
+***Emotional*** 
+
+- Empathy 
+- Anxiety 
+- Cooperativeness 
+
+***Opportunistic*** 
+
+- Risk Taking 
+- Social Astuteness 
+
+***Dependable***
+
+- Organization 
+- Traditional Values 
+- Responsibility
+</div>
+
+## Review of Participant Demographics
+
+- Highest Level of Education
+- Age
+- Experience
+- Certifications
+- Hobbies
+
+## Highest Level of Education
+`r cs_percent`%  post-secondary degrees in computer science or related fields.
+```{r Demographics, echo=FALSE, message=FALSE}
+df_ed <-df %>% filter (CyberPro=="Yes") %>% select(Education) %>%   group_by(Education) %>% summarise(n=n()/n_CyberPro$n)
+df_ed$Education <-  factor(df_ed$Education, levels=c("Secondary Education", "Associates", "Bachelors", "Masters", "PhD"))
+df_ed %>% ggplot(aes(x=Education, y=n)) + 
+        geom_col(fill="skyblue") + 
+        ylab("Percentage") + 
+        geom_text(aes( x=Education, y=n, label = round(n, 2), ),color="black", vjust= -.1, hjust = .3, size=3.5) +
+         theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + ylim(0,1) + xlab("")
+```
+
+## Age and Years of Experience 
+Median age is `r medianAge` years old;  median years of experience is `r medianExperience` years.
+```{r Demographics2, echo=FALSE, message=FALSE}
+df_Years %>% ggplot(aes(x=Years)) +
+  geom_density(fill="skyblue") + 
+  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
+  ylab("") + xlab ("") +
+  facet_grid(.~Category, scales="free_x") 
+```
+
+## Certifications
+```{r Certifications, echo=FALSE, message=FALSE}
+df_cert3 %>% filter (Certifications != "None", n >.03) %>% ggplot() + geom_col(aes(x=reorder(Certifications, n), y=n), fill="skyblue") +
+  geom_text(aes( x=Certifications, y=n, label = round(n, 2), ),color="black", vjust= -.1, hjust = .3, size=3.5) +
+  coord_flip() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank()) + xlab("") + ylab("% of cybersecurity professionals with certificate")
+```
+
+## Hobbies 
+```{r Hobbies, message=FALSE, warning=FALSE, echo=FALSE}
+text2 <- df_hobby2$Hobbies# Create a corpus  
+docs2 <- Corpus(VectorSource(text2))
+docs2 <- docs2 %>%
+  #tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs2 <- tm_map(docs2, content_transformer(tolower))
+docs2 <- tm_map(docs2, removeWords, stopwords("english"))
+dtm2 <- TermDocumentMatrix(docs2) 
+matrix2 <- as.matrix(dtm2) 
+words2 <- sort(rowSums(matrix2),decreasing=TRUE) 
+df_text2 <- data.frame(word = names(words2),freq=words2)
+wordcloud2(data=df_text2, size=.4, color='random-dark', backgroundColor = "lightgray" )
+```
+
+## Personality Results (1 of 2)
+```{r ScaledScores, echo=FALSE, message=FALSE}
+personality_results2 <- df_scored2 %>% filter(CyberPro=="Yes") %>% 
+  gather(Anxiety:Traditional_Values, key=Dimension, value = Score) %>% group_by(Dimension) %>% 
+  arrange(Dimension, Age) %>%  mutate(Average = movavg(Score, 41, type="s"))
+
+personality_results2$Age <- as.integer(personality_results2$Age)
+  
+q <- personality_results2 %>% filter(Age >=29) %>%     
+        ggplot(aes(x=reorder(Dimension, Average, FUN=mean), y=round(Average, 2), color=Dimension)) + 
+        geom_point(size=3) +
+        coord_flip() + ylim(-1.5,1.5) +
+        geom_hline(yintercept=0, linetype="dotted") +
+        xlab("") +
+     ylab("moving average (z score)") +
+        theme(legend.title= element_text(color="blue", size=10), legend.position = "blank") 
+ 
+  
+anim2 <- q + transition_time(Age) +  labs(title = "Age: {frame_time}") + shadow_wake(wake_length = 0.1, alpha = FALSE)
+animate(anim2, height=500, width=600)
+```
+
+## Personality Results (2 of 2) 
+```{r ScaledScores2, echo=FALSE, message=FALSE}
+personality_results <- df_scored2 %>% filter(CyberPro=="Yes") %>% 
+  gather(Anxiety:Traditional_Values, key=Dimension, value = Score) %>%
+  summarySE(measurevar = "Score", groupvars = "Dimension") %>%
+   mutate(Comparison = if_else(Score<=-.5, "Low", if_else(Score>=.5, "High", "Average")))
+personality_results$Comparison <- factor (personality_results$Comparison, levels = c("High", "Average", "Low"))
+
+personality_results %>% 
+        mutate(Dimension=reorder(Dimension, Score, FUN=max)) %>%    
+        ggplot(aes(x=Dimension, y=round(Score, 2), color=Comparison)) + 
+        geom_point() +
+        geom_errorbar(aes(ymin=Score-ci, ymax=Score+ci), width=.1 ) +
+        coord_flip() + ylim(-1.5,1.5) +
+        geom_hline(yintercept=0, linetype="dotted") +
+        xlab("") +
+     ylab("group mean with 95% ci (z score)") +
+        scale_color_manual(name="general workforce comparison", values=c("green", "darkgray", "blue")) +
+  theme(legend.title= element_text(color="blue", size=10), legend.position = "top") + 
+  labs(caption = "Note: z scores developed from the E-S Community Sample data to establish norms of the general workforce")
+```
+
+## Clustering Analysis
+sub-groups within the cybersecurity workforce?
+```{r HClustering, echo=FALSE, warning=FALSE}
+h_cluster <- hclust(dist(clustering))
+h_cluster %>% ggdendrogram(rotate=TRUE, theme_dendro = TRUE, size=1)
+```
+
+## Latent Profile Analysis (1 of 3)
+cluster 1: n= `r df_scored3 %>% filter(cluster=="1") %>% count()` ; cluster 2: n= `r df_scored3 %>% filter(cluster=="2") %>% count()`
+```{r LPAResults, echo=FALSE, warning=FALSE}
+df_cluster2 %>% ungroup() %>%
+  mutate(Dimension = fct_reorder(Dimension, Score, .fun=max)) %>%
+  ggplot(aes (x=Dimension, y=Score, group=cluster)) +
+  geom_col(aes(fill=Comparison), size=2) +
+  scale_fill_manual(values = c("skyblue", "gray", "lightgreen")) +
+  coord_flip() + 
+  geom_hline(yintercept = 0, color="red", linetype="dashed") +
+  theme(legend.title= element_text(color="blue", size=10), legend.position = "top") +
+  xlab("") + ylab("cluster mean (z score)") +
+  ylim(-1.5,1.5)+
+  facet_grid(.~cluster)
+```
+
+## Latent Profile Analysis (2 of 3)
+```{r LPAResults3, echo=FALSE, message=FALSE, warning=FALSE}
+df_cluster3 <- df_cluster2 %>% ungroup() %>%  group_by(Dimension) %>% 
+  summarise(clustersd=abs(diff(Score))) %>% 
+  right_join(df_cluster)
+
+df_cluster3 %>% ungroup() %>% mutate(Dimension=reorder(Dimension, clustersd, FUN=max)) %>%
+  ggplot(aes()) +
+    geom_density( aes(x=Score, fill=cluster), alpha=.7 ) +
+    ylim(0,.8) +
+    geom_hline(yintercept=0, linetype="dotted") +
+   scale_linetype_manual(values=c("solid", "dashed")) +
+    xlab("") +
+   ylab("") +
+    scale_fill_manual(values=c("lightgreen", "skyblue")) +
+  theme(legend.title= element_text(color="blue", size=10), legend.position = "top") +
+  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) +facet_wrap(Dimension~.)
+```
+
+## Latent Profile Analysis (3 of 3)
+```{r LPAResults2, echo=FALSE, message=FALSE, warning=FALSE}
+df_cluster3 %>% ungroup() %>% summarySE(groupvars=c("Dimension", "cluster", "clustersd"), measurevar="Score") %>% mutate(Dimension=reorder(Dimension, clustersd, FUN=max)) %>% 
+        ggplot(aes(x=Dimension, y=round(Score, 2), color=cluster, group=cluster)) + 
+        geom_point(size=3) +
+        geom_errorbar(aes(ymin=Score-ci, ymax=Score+ci), width=.1, color="darkgray" ) +
+        coord_flip() + ylim(-2,2) +
+        geom_hline(yintercept=0, linetype="dotted") +
+        #geom_line( aes(linetype=cluster) ) +
+        #scale_linetype_manual(values=c("blank", "dashed")) +
+        xlab("") +
+     ylab("cluster mean with 95% ci (z score)") +
+        scale_color_manual(values=c("lightgreen", "skyblue")) +
+  theme(legend.title= element_text(color="blue", size=10), legend.position = "top")
+```
+
+## Correlation Analysis
+```{r Correlation, echo=FALSE, message=FALSE, warning=FALSE}
+dfcorrplot <- df_ed2 %>% select(ID, Degrees) %>% left_join(df_scored3)  %>% select(ID, SelfEfficacy, Age, YearsExperience, Degrees, Proficiency, cluster) %>% column_to_rownames("ID") %>% as.data.frame()
+
+dfcorrplot$cluster <- as.numeric(dfcorrplot$cluster)
+dfcorrplot$SelfEfficacy <-  as.numeric(dfcorrplot$SelfEfficacy)
+#dfcorrplot <- scale(dfcorrplot)
+
+corrplot(cor(dfcorrplot), method="color", order="hclust", type="full", addrect=4, cl.lim=c(-1,1), addCoef.col="black", rect.col="green", diag = FALSE, number.font=1, number.digits = 1, number.cex = .7)
+```
+
+## Cognitive Proficiency
+```{r Proficiency, echo=FALSE, message=FALSE, warning=FALSE}
+df_scored %>% filter (CyberPro == "Yes", ID!="3") %>% 
+  ggplot(aes(y=Proficiency, x=Age)) + 
+  geom_point() + 
+  geom_smooth() + labs(caption = "Note: Rasch Scoring used to determine proficiency (theta) as a measure of cognitive ability; zero represents average")
+```
+
+## Comparison of profiles to cluster1
+```{r Comparison, echo=FALSE, message=FALSE, warning=FALSE}
+df_selectcluster <- df_scored %>% as.data.frame() %>%  
+  filter(CyberPro=="Yes") %>% 
+  cbind(cluster) %>% 
+  filter(cluster=="1") %>%
+  gather(Anxiety:Traditional_Values, key=Dimension, value=Score) %>% 
+  summarySE(groupvars = c("cluster", "Dimension"), measurevar = "Score")
+
+anxiety2 <- df_selectcluster %>% filter(Dimension=="Anxiety")
+breadth_of_interest2 <- df_selectcluster %>% filter(Dimension=="Breadth_of_Interest")
+complexity2 <- df_selectcluster %>% filter(Dimension=="Complexity")
+cooperativeness2 <- df_selectcluster %>% filter(Dimension=="Cooperativeness")
+empathy2 <- df_selectcluster %>% filter(Dimension=="Empathy")
+energy_level2 <- df_selectcluster %>% filter(Dimension=="Energy_Level")
+innovation2 <- df_selectcluster %>% filter(Dimension=="Innovation")
+organization2 <- df_selectcluster %>% filter(Dimension=="Organization")
+responsibility2 <- df_selectcluster %>% filter(Dimension=="Responsibility")
+risk_taking2 <- df_selectcluster %>% filter(Dimension=="Risk_Taking")
+sociability2 <- df_selectcluster %>% filter(Dimension=="Sociability")
+social_astuteness2 <- df_selectcluster %>% filter(Dimension=="Social_Astuteness")
+social_confidence2 <- df_selectcluster %>% filter(Dimension=="Social_Confidence")
+tolerance2 <- df_selectcluster %>% filter(Dimension=="Tolerance")
+traditional_values2 <- df_selectcluster %>% filter(Dimension=="Traditional_Values")
+responsibility2 <- df_selectcluster %>% filter(Dimension=="Responsibility")
+
+df_comparison <- df_scored %>%  
+        dplyr::select(Group, ID, Gender, Age, Anxiety:Traditional_Values ) %>%
+       group_by(ID) %>% 
+        mutate(Anxiety= (Anxiety-anxiety2$Score) / anxiety2$sd)   %>% 
+        mutate(Breadth_of_Interest= (Breadth_of_Interest-breadth_of_interest2$Score)/breadth_of_interest2$sd)  %>% 
+        mutate(Complexity= (Complexity - complexity2$Score)/ complexity2$sd)  %>% 
+        mutate(Cooperativeness= (Cooperativeness-cooperativeness2$Score)/cooperativeness2$sd)  %>% 
+        mutate(Empathy= (Empathy-empathy2$Score)/empathy2$sd) %>% 
+        mutate(Energy_Level= (Energy_Level-energy_level2$Score)/energy_level2$sd) %>% 
+        mutate(Innovation= (Innovation-innovation2$Score)/innovation2$sd)  %>%
+        mutate(Organization= (Organization-organization2$Score)/organization2$sd) %>% 
+        mutate(Responsibility= (Responsibility-responsibility2$Score)/responsibility2$sd) %>% 
+        mutate(Risk_Taking= (Risk_Taking-risk_taking2$Score)/risk_taking2$sd)  %>% 
+        mutate(Sociability= (Sociability-sociability2$Score)/sociability2$sd) %>%
+        mutate(Social_Astuteness= (Social_Astuteness-social_astuteness2$Score)/social_astuteness2$sd) %>%
+        mutate(Social_Confidence= (Social_Confidence-social_confidence2$Score)/social_confidence2$sd)  %>%
+        mutate(Tolerance= (Tolerance-tolerance2$Score)/tolerance2$sd) %>%
+        mutate(Traditional_Values= (Traditional_Values-traditional_values2$Score)/traditional_values2$sd) %>% 
+        gather(Anxiety:Traditional_Values, key=Dimension, value=Score)
+
+p <- df_comparison %>%  filter(ID %in% c("2", "3", "4", "47", "6" ,"33")) %>%  ggplot(aes(x=reorder(Dimension, abs(Score), .fun=max), y=Score, color=ID, group=ID)) + 
+  geom_point(size=3) + 
+  coord_flip() +
+  geom_hline(yintercept = 0, linetype="dashed") +
+  scale_color_manual(values=c("skyblue", "green", "green", "skyblue", "green", "skyblue")) + 
+  xlab("") + ylab("z score") + labs(caption = "Note: z scores developed from cluster 1 mean and standard deviation values")
+
+# https://www.datanovia.com/en/blog/gganimate-how-to-create-plots-with-beautiful-animation-in-r/
+  
+anim <- p + transition_states(ID, transition_length = 3, state_length = 1) 
+animate(anim, height=500, width=600)
+```
+
+## Conclusions
+<div class="red">
+Hypothesis to test: Cybersecurity workers are similar in personality to others in the general workforce population.
+</div>
+
+
+What is your Conclusion: ***Accept*** the Null Hypothesis -or- ***Reject*** the Null Hypothesis
+
+***Can personality profiling predict one's professional interests and latent talent to perform specialized work roles?***
+
+## References
+Douglas N. Jackson, Technical Manual: Jackson Personlaity Inventory - Revised, published by Sigma Assessment Systems, August 1994.
+
+International Personality Item Pool, available at: https://ipip.ori.org/
+
+R Core Team (2019). R: A language and environment for statistical
+  computing. R Foundation for Statistical Computing, Vienna, Austria. URL
+  https://www.R-project.org/.
+
+Eugene-Springfield Community Sample, Harvard Dataverse, available at: https://dataverse.harvard.edu/dataverse/ESCS-Data 
+
+## Back-up: Gender Differences
+```{r TestComparison, echo=FALSE, message=FALSE, warning=FALSE}
+df_ESscored <- as.data.frame(df_ESscored)
+df_ESscored %>% mutate_at(vars(Anxiety:Traditional_Values), scale) %>%  gather(Anxiety:Traditional_Values, key=Dimension, value=Score) %>% summarySE(groupvars = c("Gender", "Dimension"), measurevar = "Score") %>% 
+      mutate(Dimension=reorder(Dimension, Score, FUN=max)) %>%
+      ggplot(aes(x=Dimension, y=Score, group=Gender)) +
+      geom_errorbar(aes(ymin=Score-ci, ymax=Score+ci), width=.2 ) +
+      geom_point( aes(color=Gender), size=3) +
+      coord_flip() + ylim(-2,2) +
+      scale_color_manual(values=c("tomato", "lightblue")) +
+      ylab("gender mean with 95% ci (z score)") +
+            xlab("") +  
+      theme(legend.position = "top") + 
+      labs(caption = "*gender differences by personality trait based on E-S Community Sample data (n~400)")
+```
+
+
+## Back-Up: Trait Descriptions (1 of 3) 
+Analytical <br>
+
+ - Complexity: seeks intricate solutions to problems
+ - Breadth of Interest: interested in learing about a diversity of things
+ - Innovation: motivated to develop novel solutions to problems; values new ideas
+ - Tolerance: accepts people even though they may differ from oneself; welcomes dissent
+ 
+## Back-Up: Trait Descriptions (2 of 3) 
+Emotional 
+
+ - Empathy: tends to identify closely with other people and their problems
+ - Anxiety: tends to worry over inconsequential matters; apprehensive about the future
+ - Cooperativeness: is susceptible to social influence and group pressures; follows suit
+
+Extroversion 
+
+- Sociability: eagerly join a varity of social groups; actively social
+- Social Confidence: confident in dealing with others; shows presence in interpersonal situations
+- Energy level: is active and spirited; does not tire easily; capable of intense work for long periods
+
+## Back-Up: Trait Descriptions (3 of 3) 
+Opportunistic 
+
+- Social Astuteness: skillful at persuading others to achieve a particlular goal; occasionally seen as manipulative of others, but ordinarily diplomatic
+- Risk Taking: enjoys gambling and taking a chance; willingly exposes self to situations with uncertain outcomes
+
+Dependable 
+
+- Organization: makes effective use of time; not easily distracted
+- Traditional Values: values traditional customs and beliefs; others may view individual as "old-fashioned"
+- Responsibility: strong obligation to be honest and upright; strong an inflexibly conscience   
