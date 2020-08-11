@@ -559,7 +559,7 @@ p <- df_comparison %>%  filter(ID %in% c("2", "3", "4", "47", "6" ,"33", "9", "2
   geom_point(size=3) + 
   coord_flip() + ylim(-4,4) +
   geom_hline(yintercept = 0, linetype="dashed") +
-  scale_color_manual(values=c("skyblue", "green")) + 
+  scale_color_manual(values=c("blue", "green")) + 
   xlab("") + ylab("z score") + 
   theme(legend.position = "blank") +
   labs(caption = "Note: z scores developed from selected cluster mean and standard deviation values")
@@ -597,7 +597,7 @@ dfcorrplot <- df_ed2 %>% select(ID, Degrees) %>% left_join(df_scored3)  %>% sele
 dfcorrplot$SelfEfficacy <-  as.numeric(dfcorrplot$SelfEfficacy)
 #dfcorrplot <- scale(dfcorrplot)
 
-corrplot(cor(dfcorrplot), method="color", order="hclust", type="full", addrect=4, cl.lim=c(-1,1), addCoef.col="black", rect.col="green", diag = FALSE, number.font=1, number.digits = 1, number.cex = .7)
+corrplot(cor(dfcorrplot), method="color", order="hclust", type="full", addrect=3, cl.lim=c(-1,1), addCoef.col="black", rect.col="green", diag = FALSE, number.font=1, number.digits = 1, number.cex = .7)
 ```
 
 <div class="notes">
@@ -610,7 +610,7 @@ Is "Self-Efficacy" dependent on age and experience?
 ```{r Correlation2, echo=FALSE, message=FALSE, warning=FALSE}
 dfcorrplot <- df_ed2 %>% select(ID, Degrees) %>% left_join(df_scored3)  %>% select(ID, Anxiety:Traditional_Values) %>% column_to_rownames("ID") %>% as.data.frame()
 
-corrplot(cor(dfcorrplot), method="color", order="hclust", type="full", addrect=5, cl.lim=c(-1,1), addCoef.col="black", rect.col="green", diag = FALSE, number.font=1, number.digits = 1, number.cex = .7)
+corrplot(cor(dfcorrplot), method="color", order="hclust", type="full", addrect=4, cl.lim=c(-1,1), addCoef.col="black", rect.col="green", diag = FALSE, number.font=1, number.digits = 1, number.cex = .7)
 ```
 
 ## Conclusions {.build}
