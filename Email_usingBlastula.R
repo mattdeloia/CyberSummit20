@@ -23,7 +23,7 @@ create_smtp_creds_key(
 n_CyberPro <- df %>% filter(CyberPro=="Yes") %>% count(CyberPro) 
 n_Not_CyberPro <- df %>% filter (CyberPro=="No") %>% count(CyberPro)
 
-df_scored2b <- df_scored2 %>% drop_na(Email) %>%  filter(ID %in% c("1", "4")) #Remove filter when going live
+df_scored2b <- df_scored2 %>% drop_na(Email) %>%  filter(ID %in% c("1")) #Remove filter when going live
 df_scored2c <- df_scored2b %>% as.data.frame() %>%   mutate("ID"=rownames(df_scored2b))
 df_scored2d <- df_scored2c %>% gather(Anxiety:Traditional_Values, key=Dimension, value=Score) %>%
         mutate(Percentile=(round(pnorm(Score), 2)*100)) %>%
@@ -35,7 +35,7 @@ df_scored2d <- df_scored2c %>% gather(Anxiety:Traditional_Values, key=Dimension,
 df_scored2d$Comparison <- factor (df_scored2d$Comparison, levels = c("high", "average", "low"))
 
 ###############################################
-for (i in 1:2) {
+for (i in 1:1) {
 id2 <- df_scored2c %>% filter(ID==i) 
 id3 <- id2$Email
 date_time <- add_readable_time()
