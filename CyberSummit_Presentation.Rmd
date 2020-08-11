@@ -32,6 +32,7 @@ library(stringr)
 library(tm)
 library(gganimate)
 library(pracma)
+library(lubridate)
 
 likertNum <- function(x){
         case_when(
@@ -54,7 +55,7 @@ likertNum2 <- function(x){
 }
 
 #load Cyber Summit Questionnnaire data
-df <- read_excel("CyberSummitQuestionnaire_Data21July20.xls")
+df <- read_excel("CyberSummitQuestionnaire_Data11Aug20.xls")
 df <- df %>% rownames_to_column("ID") 
 n_CyberPro <- df %>% filter(CyberPro=="Yes") %>% count()
 df$Duration <- as.hms(df$Duration)
@@ -227,13 +228,18 @@ df_scored2 <- df_scored %>%
 
 #Latent Profile Analysis
 lpa_test <- df_scores %>% filter(CyberPro=="Yes") %>% select(P_AN5:P_RE4, ID) %>% column_to_rownames ("ID") 
-clustering <- lpa_test %>%  mutate_all(list(scale))
-BIC <- mclustBIC(clustering)
+#clustering <- lpa_test %>%  mutate_all(list(scale))
+#BIC <- mclustBIC(clustering)
 #plot(BIC)
-summary(BIC)
-mod1 <- Mclust(clustering, modelNames = "VII", G = 2, x = BIC)
-mod1$call
-cluster <- mod1$classification %>% as.factor()
+#summary(BIC)
+#mod1 <- Mclust(clustering, modelNames = "VII", G = 1, x = BIC)
+#mod1$call
+#cluster <- mod1$classification %>% as.factor()
+set.seed(98)
+kmeans_test <- df_scores %>% filter(CyberPro=="Yes") %>% select(P_AN5:P_RE4, ID) %>% column_to_rownames ("ID")
+clustering <- kmeans_test %>% mutate_all(list(scale))
+myclusters <- kmeans(clustering, centers = 2, nstart = 25)
+cluster <- myclusters$cluster
 
 df_scored2 <- as.data.frame(df_scored2)
 df_scored3 <- df_scored2 %>% filter(CyberPro=="Yes") %>%  cbind(cluster)
@@ -247,18 +253,18 @@ df_cluster2 <- df_cluster %>% summarySE (groupvars=c("Dimension", "cluster"), me
 df_cluster2$Comparison <- factor (df_cluster2$Comparison, levels = c("Low", "Average", "High"))
 ```
 
-## Introduction
+## Introduction {.build}
 Problem Statement:  To understand if highly specialized roles, like cybersecurity, attract workers with similar personality profiles.
 
 Hypothesis to test: Cybersecurity workers are similar in personality to others in the general workforce population.
 
 ## Session Aims {.pagenumbers}
 
-- Data Collection and Reporting: report a personality profile(s) of cybersecurity professionals attending CyberSummit20
+- Data Collection and Reporting: report the most prevalent personality profile among cybersecurity professionals attending CyberSummit20
 
-- Analysis & Insights: identify unique personality features (traits) of cybersecurity professionals when compared to the general workforce population
+- Analysis & Insights: identify unique personality traits of cybersecurity professionals
 
-- Conclusions: share ideas and opinions, non-attributional, through the chat module (so I can benefit from your experience and insight)
+- Conclusions: share ideas and opinions through the chat module (so I can benefit from your experience and insight)
 
 ## Background (1 of 3)|Cybersecurity Talent Assessment Design
 
@@ -272,7 +278,7 @@ Hypothesis to test: Cybersecurity workers are similar in personality to others i
 
 This 75 question personality assessment aims to measure 15 underlying personality traits using similar measurements to the <a href="https://w8y7a2j5.stackpathcdn.com/wp-content/uploads/2015/03/JPI-R-Scales.pdf">Jackson Personality Inventory - Revised (JPI-R)</a>.  
 
-The JPI-R measures were selected due to the range of personality traits measured and inclusion of 7 measurements for "analytical" and "dependable," traits presumed to enhance performance in highly technical work roles.  This set of measures has been useful in vocational counseling.  
+The JPI-R measures were selected due to the range of personality traits measured and inclusion of 7 measurements for "analytical" and "dependable," traits previously reported in those performing highly technical work roles.  This set of 15 measures has been useful in vocational counseling.  
 
 This ***JPI-R proxy*** consists of questions drawn from the public domain repository of personality questions  (https://ipip.ori.org/). <br>
 
@@ -309,6 +315,17 @@ This ***JPI-R proxy*** consists of questions drawn from the public domain reposi
 - Responsibility
 </div>
 
+<div class="notes">
+
+- Complexity: seeks intricate solutions to problems
+- Tolerance: accepts people even though they may differ from oneself; welcomes dissent
+- Cooperativeness: is susceptible to social influence and group pressures; follows suit
+- Social Astuteness: skillful at persuading others to achieve a particlular goal; occasionally seen as manipulative of others
+- Traditional Values: values traditional customs and beliefs; others may view individual as "old-fashioned"
+- Responsibility: strong obligation to be honest and upright; an inflexibly conscience
+
+</div>
+
 ## Review of Participant Demographics
 
 - Highest Level of Education
@@ -317,7 +334,7 @@ This ***JPI-R proxy*** consists of questions drawn from the public domain reposi
 - Certifications
 - Hobbies
 
-## Highest Level of Education
+## Highest Level of Education (n=`r n_CyberPro`)
 `r cs_percent`%  post-secondary degrees in computer science or related fields.
 ```{r Demographics, echo=FALSE, message=FALSE}
 df_ed <-df %>% filter (CyberPro=="Yes") %>% select(Education) %>%   group_by(Education) %>% summarise(n=n()/n_CyberPro$n)
@@ -330,7 +347,7 @@ df_ed %>% ggplot(aes(x=Education, y=n)) +
 ```
 
 ## Age and Years of Experience 
-Median age is `r medianAge` years old;  median years of experience is `r medianExperience` years.
+Median age is `r medianAge` years;  median years of experience is `r medianExperience`.
 ```{r Demographics2, echo=FALSE, message=FALSE}
 df_Years %>% ggplot(aes(x=Years)) +
   geom_density(fill="skyblue") + 
@@ -342,7 +359,7 @@ df_Years %>% ggplot(aes(x=Years)) +
 ## Certifications
 ```{r Certifications, echo=FALSE, message=FALSE}
 df_cert3 %>% filter (Certifications != "None", n >.03) %>% ggplot() + geom_col(aes(x=reorder(Certifications, n), y=n), fill="skyblue") +
-  geom_text(aes( x=Certifications, y=n, label = round(n, 2), ),color="black", vjust= -.1, hjust = .3, size=3.5) +
+  geom_text(aes( x=Certifications, y=n, label = round(n, 2), ),color="black", vjust= -.1, hjust = .4, size=3.5) +
   coord_flip() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank()) + xlab("") + ylab("% of cybersecurity professionals with certificate")
 ```
 
@@ -364,26 +381,31 @@ wordcloud2(data=df_text2, size=.4, color='random-dark', backgroundColor = "light
 ```
 
 ## Personality Results (1 of 2)
-```{r ScaledScores, echo=FALSE, message=FALSE}
+```{r ScaledScores, echo=FALSE, message=FALSE, warning=FALSE}
 personality_results2 <- df_scored2 %>% filter(CyberPro=="Yes") %>% 
   gather(Anxiety:Traditional_Values, key=Dimension, value = Score) %>% group_by(Dimension) %>% 
-  arrange(Dimension, Age) %>%  mutate(Average = movavg(Score, 41, type="s"))
+  arrange(Dimension, Age) %>%  mutate(Average = movavg(Score, 94, type="s"))
 
 personality_results2$Age <- as.integer(personality_results2$Age)
   
-q <- personality_results2 %>% filter(Age >=29) %>%     
+q <- personality_results2 %>% filter(Age >=22) %>%     
         ggplot(aes(x=reorder(Dimension, Average, FUN=mean), y=round(Average, 2), color=Dimension)) + 
         geom_point(size=3) +
         coord_flip() + ylim(-1.5,1.5) +
         geom_hline(yintercept=0, linetype="dotted") +
         xlab("") +
      ylab("moving average (z score)") +
-        theme(legend.title= element_text(color="blue", size=10), legend.position = "blank") 
+        theme(legend.title= element_text(color="black", size=10), legend.position = "blank") 
  
-  
-anim2 <- q + transition_time(Age) +  labs(title = "Age: {frame_time}") + shadow_wake(wake_length = 0.1, alpha = FALSE)
+  anim2 <- q + transition_time(Age) +  labs(title = "Age: {frame_time}") + shadow_wake(wake_length = 0.1, alpha = FALSE)
 animate(anim2, height=500, width=600)
 ```
+
+<div class="notes">
+
+Do personality traits modify with Age and Experience?
+
+</div>
 
 ## Personality Results (2 of 2) 
 ```{r ScaledScores2, echo=FALSE, message=FALSE}
@@ -398,21 +420,33 @@ personality_results %>%
         ggplot(aes(x=Dimension, y=round(Score, 2), color=Comparison)) + 
         geom_point() +
         geom_errorbar(aes(ymin=Score-ci, ymax=Score+ci), width=.1 ) +
-        coord_flip() + ylim(-1.5,1.5) +
+        coord_flip() + ylim(-2,2) +
         geom_hline(yintercept=0, linetype="dotted") +
         xlab("") +
      ylab("group mean with 95% ci (z score)") +
         scale_color_manual(name="general workforce comparison", values=c("green", "darkgray", "blue")) +
-  theme(legend.title= element_text(color="blue", size=10), legend.position = "top") + 
+  theme(legend.title= element_text(color="black", size=10), legend.position = "top") + 
   labs(caption = "Note: z scores developed from the E-S Community Sample data to establish norms of the general workforce")
 ```
 
+<div class="notes">
+
+What aspects of personlity are most stable or like the general workforce?
+
+</div>
+
 ## Clustering Analysis
-sub-groups within the cybersecurity workforce?
+
 ```{r HClustering, echo=FALSE, warning=FALSE}
 h_cluster <- hclust(dist(clustering))
 h_cluster %>% ggdendrogram(rotate=TRUE, theme_dendro = TRUE, size=1)
 ```
+
+<div class="notes">
+
+Are there multiple personality profiles within the cybersecurity workforce?
+
+</div>
 
 ## Latent Profile Analysis (1 of 3)
 cluster 1: n= `r df_scored3 %>% filter(cluster=="1") %>% count()` ; cluster 2: n= `r df_scored3 %>% filter(cluster=="2") %>% count()`
@@ -424,7 +458,7 @@ df_cluster2 %>% ungroup() %>%
   scale_fill_manual(values = c("skyblue", "gray", "lightgreen")) +
   coord_flip() + 
   geom_hline(yintercept = 0, color="red", linetype="dashed") +
-  theme(legend.title= element_text(color="blue", size=10), legend.position = "top") +
+  theme(legend.title= element_text(color="black", size=10), legend.position = "top") +
   xlab("") + ylab("cluster mean (z score)") +
   ylim(-1.5,1.5)+
   facet_grid(.~cluster)
@@ -439,15 +473,20 @@ df_cluster3 <- df_cluster2 %>% ungroup() %>%  group_by(Dimension) %>%
 df_cluster3 %>% ungroup() %>% mutate(Dimension=reorder(Dimension, clustersd, FUN=max)) %>%
   ggplot(aes()) +
     geom_density( aes(x=Score, fill=cluster), alpha=.7 ) +
-    ylim(0,.8) +
+    ylim(0,.9) +
     geom_hline(yintercept=0, linetype="dotted") +
    scale_linetype_manual(values=c("solid", "dashed")) +
     xlab("") +
    ylab("") +
     scale_fill_manual(values=c("lightgreen", "skyblue")) +
-  theme(legend.title= element_text(color="blue", size=10), legend.position = "top") +
+  theme(legend.title= element_text(color="black", size=10), legend.position = "top") +
   theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) +facet_wrap(Dimension~.)
 ```
+<div class="notes">
+
+Where are the cluster differences greatest?
+
+</div>
 
 ## Latent Profile Analysis (3 of 3)
 ```{r LPAResults2, echo=FALSE, message=FALSE, warning=FALSE}
@@ -462,29 +501,15 @@ df_cluster3 %>% ungroup() %>% summarySE(groupvars=c("Dimension", "cluster", "clu
         xlab("") +
      ylab("cluster mean with 95% ci (z score)") +
         scale_color_manual(values=c("lightgreen", "skyblue")) +
-  theme(legend.title= element_text(color="blue", size=10), legend.position = "top")
+  theme(legend.title= element_text(color="black", size=10), legend.position = "top")
 ```
+<div class="notes">
 
-## Correlation Analysis
-```{r Correlation, echo=FALSE, message=FALSE, warning=FALSE}
-dfcorrplot <- df_ed2 %>% select(ID, Degrees) %>% left_join(df_scored3)  %>% select(ID, SelfEfficacy, Age, YearsExperience, Degrees, Proficiency, cluster) %>% column_to_rownames("ID") %>% as.data.frame()
+Which profile is most distinguished from the general workforce?
 
-dfcorrplot$cluster <- as.numeric(dfcorrplot$cluster)
-dfcorrplot$SelfEfficacy <-  as.numeric(dfcorrplot$SelfEfficacy)
-#dfcorrplot <- scale(dfcorrplot)
+</div>
 
-corrplot(cor(dfcorrplot), method="color", order="hclust", type="full", addrect=4, cl.lim=c(-1,1), addCoef.col="black", rect.col="green", diag = FALSE, number.font=1, number.digits = 1, number.cex = .7)
-```
-
-## Cognitive Proficiency
-```{r Proficiency, echo=FALSE, message=FALSE, warning=FALSE}
-df_scored %>% filter (CyberPro == "Yes", ID!="3") %>% 
-  ggplot(aes(y=Proficiency, x=Age)) + 
-  geom_point() + 
-  geom_smooth() + labs(caption = "Note: Rasch Scoring used to determine proficiency (theta) as a measure of cognitive ability; zero represents average")
-```
-
-## Comparison of profiles to cluster1
+## Comparison of Profiles to Cluster 1 
 ```{r Comparison, echo=FALSE, message=FALSE, warning=FALSE}
 df_selectcluster <- df_scored %>% as.data.frame() %>%  
   filter(CyberPro=="Yes") %>% 
@@ -511,7 +536,7 @@ traditional_values2 <- df_selectcluster %>% filter(Dimension=="Traditional_Value
 responsibility2 <- df_selectcluster %>% filter(Dimension=="Responsibility")
 
 df_comparison <- df_scored %>%  
-        dplyr::select(Group, ID, Gender, Age, Anxiety:Traditional_Values ) %>%
+        dplyr::select(Group, CyberPro, ID, Gender, Age, Anxiety:Traditional_Values ) %>%
        group_by(ID) %>% 
         mutate(Anxiety= (Anxiety-anxiety2$Score) / anxiety2$sd)   %>% 
         mutate(Breadth_of_Interest= (Breadth_of_Interest-breadth_of_interest2$Score)/breadth_of_interest2$sd)  %>% 
@@ -530,28 +555,81 @@ df_comparison <- df_scored %>%
         mutate(Traditional_Values= (Traditional_Values-traditional_values2$Score)/traditional_values2$sd) %>% 
         gather(Anxiety:Traditional_Values, key=Dimension, value=Score)
 
-p <- df_comparison %>%  filter(ID %in% c("2", "3", "4", "47", "6" ,"33")) %>%  ggplot(aes(x=reorder(Dimension, abs(Score), .fun=max), y=Score, color=ID, group=ID)) + 
+p <- df_comparison %>%  filter(ID %in% c("2", "3", "4", "47", "6" ,"33", "9", "20")) %>%  ggplot(aes(x=reorder(Dimension, abs(Score), .fun=max), y=Score, color=CyberPro)) + 
   geom_point(size=3) + 
-  coord_flip() +
+  coord_flip() + ylim(-4,4) +
   geom_hline(yintercept = 0, linetype="dashed") +
-  scale_color_manual(values=c("skyblue", "green", "green", "skyblue", "green", "skyblue")) + 
-  xlab("") + ylab("z score") + labs(caption = "Note: z scores developed from cluster 1 mean and standard deviation values")
+  scale_color_manual(values=c("skyblue", "green")) + 
+  xlab("") + ylab("z score") + 
+  theme(legend.position = "blank") +
+  labs(caption = "Note: z scores developed from selected cluster mean and standard deviation values")
 
 # https://www.datanovia.com/en/blog/gganimate-how-to-create-plots-with-beautiful-animation-in-r/
   
-anim <- p + transition_states(ID, transition_length = 3, state_length = 1) 
+anim <- p + transition_states(ID, transition_length = 1, state_length = 1) 
 animate(anim, height=500, width=600)
 ```
 
-## Conclusions
-<div class="red">
+<div class="notes">
+
+Please vote: Which color do you think highlights the cybersecurity professionals in this sample?
+
+</div>
+
+## Cognitive Proficiency
+```{r Proficiency, echo=FALSE, message=FALSE, warning=FALSE}
+df_scored %>% filter (CyberPro == "Yes", ID!="3") %>% 
+  ggplot(aes(y=Proficiency, x=Age)) + 
+  geom_point() + 
+  geom_smooth() + labs(caption = "Note: Rasch Scoring used to determine proficiency (theta) as a measure of cognitive ability; zero represents average")
+```
+<div class="notes">
+
+Is there a relationship between cognitive ability and age?
+
+</div>
+
+## Correlation Analysis (1 of 2)
+```{r Correlation, echo=FALSE, message=FALSE, warning=FALSE}
+dfcorrplot <- df_ed2 %>% select(ID, Degrees) %>% left_join(df_scored3)  %>% select(ID, SelfEfficacy, Age, YearsExperience, Degrees, Proficiency) %>% column_to_rownames("ID") %>% as.data.frame()
+
+#dfcorrplot$cluster <- as.numeric(dfcorrplot$cluster)
+dfcorrplot$SelfEfficacy <-  as.numeric(dfcorrplot$SelfEfficacy)
+#dfcorrplot <- scale(dfcorrplot)
+
+corrplot(cor(dfcorrplot), method="color", order="hclust", type="full", addrect=4, cl.lim=c(-1,1), addCoef.col="black", rect.col="green", diag = FALSE, number.font=1, number.digits = 1, number.cex = .7)
+```
+
+<div class="notes">
+
+Is "Self-Efficacy" dependent on age and experience?
+
+</div>
+
+## Correlation Analysis (2 of 2)
+```{r Correlation2, echo=FALSE, message=FALSE, warning=FALSE}
+dfcorrplot <- df_ed2 %>% select(ID, Degrees) %>% left_join(df_scored3)  %>% select(ID, Anxiety:Traditional_Values) %>% column_to_rownames("ID") %>% as.data.frame()
+
+corrplot(cor(dfcorrplot), method="color", order="hclust", type="full", addrect=5, cl.lim=c(-1,1), addCoef.col="black", rect.col="green", diag = FALSE, number.font=1, number.digits = 1, number.cex = .7)
+```
+
+## Conclusions {.build}
+<div class="blue">
 Hypothesis to test: Cybersecurity workers are similar in personality to others in the general workforce population.
 </div>
 
 
-What is your Conclusion: ***Accept*** the Null Hypothesis -or- ***Reject*** the Null Hypothesis
+What is your Conclusion: ***Accept*** the Null Hypothesis -or- ***Reject*** the Null Hypothesis?
 
-***Can personality profiling predict one's professional interests and latent talent to perform specialized work roles?***
+<div class="notes">
+
+Please vote: Do you Accept the Null Hypothesis -or- do you Reject the Null Hypothesis?
+
+</div>
+
+Can personality profiling predict one's professional interests and ***latent talent*** to perform specialized work roles?
+
+Individual Reports...Coming Soon.
 
 ## References
 Douglas N. Jackson, Technical Manual: Jackson Personlaity Inventory - Revised, published by Sigma Assessment Systems, August 1994.
@@ -563,6 +641,8 @@ R Core Team (2019). R: A language and environment for statistical
   https://www.R-project.org/.
 
 Eugene-Springfield Community Sample, Harvard Dataverse, available at: https://dataverse.harvard.edu/dataverse/ESCS-Data 
+
+Full Presentation available at: https://mattdeloia.github.io/CyberSummit20/
 
 ## Back-up: Gender Differences
 ```{r TestComparison, echo=FALSE, message=FALSE, warning=FALSE}
@@ -612,4 +692,4 @@ Dependable
 
 - Organization: makes effective use of time; not easily distracted
 - Traditional Values: values traditional customs and beliefs; others may view individual as "old-fashioned"
-- Responsibility: strong obligation to be honest and upright; strong an inflexibly conscience   
+- Responsibility: strong obligation to be honest and upright; an inflexibly conscience   
